@@ -54,13 +54,17 @@ def perform_eda(df):
     st.pyplot()
 
 # Data Preprocessing Function
+# Data Preprocessing Function
 def preprocess_data(df):
-    # Handling categorical and numerical columns
-    cat_cols = df.select_dtypes(include=['object']).columns.tolist()
-    num_cols = df.select_dtypes(include=['number']).columns.tolist()
-    num_cols.remove('y')  # Removing target column from numerical features
+    # Identify available categorical and numerical columns
+    cat_cols = [col for col in df.select_dtypes(include=['object']).columns if col in df.columns]
+    num_cols = [col for col in df.select_dtypes(include=['number']).columns if col in df.columns]
 
-    # Pipeline for preprocessing
+    # Safely remove the target column 'y' if present
+    if 'y' in num_cols:
+        num_cols.remove('y')
+
+    # Define preprocessing pipelines
     numeric_transformer = Pipeline(steps=[
         ('imputer', SimpleImputer(strategy='mean')),
         ('scaler', StandardScaler())])
@@ -69,18 +73,27 @@ def preprocess_data(df):
         ('imputer', SimpleImputer(strategy='most_frequent')),
         ('onehot', OneHotEncoder(handle_unknown='ignore'))])
 
+    # Combine preprocessors
     preprocessor = ColumnTransformer(
         transformers=[
             ('num', numeric_transformer, num_cols),
-            ('cat', categorical_transformer, cat_cols)])
+            ('cat', categorical_transformer, cat_cols)],
+        remainder='drop')  # Ensure only specified columns are processed
 
-    # Split data into features and target
+    # Check if 'y' exists before splitting features and target
+    if 'y' not in df.columns:
+        raise ValueError("Target column 'y' not found in the dataset.")
+
+    # Split features and target
     X = df.drop(columns=['y'])
     y = df['y'].apply(lambda x: 1 if x == 'yes' else 0)
 
-    # Apply SMOTE to address class imbalance
+    # Apply preprocessing to X
+    X_preprocessed = preprocessor.fit_transform(X)
+
+    # Handle class imbalance with SMOTE
     smote = SMOTE(random_state=42)
-    X_resampled, y_resampled = smote.fit_resample(X, y)
+    X_resampled, y_resampled = smote.fit_resample(X_preprocessed, y)
 
     return X_resampled, y_resampled, preprocessor
 
